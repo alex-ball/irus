@@ -9,7 +9,7 @@ use strict;
 # @jesusbagpuss
 # Counter v5 - send data about abstract page views (invesitgations) as well as downloads
 
-# borrowed from EPrints 3.3's EPrints::OpenArchives::archive_id
+# borrowed from EPrints 3.4's EPrints::OpenArchives::archive_id
 sub _archive_id
 {
 	my( $repo, $any ) = @_;
@@ -18,6 +18,7 @@ sub _archive_id
 	my $v2 = $repo->config( "oai", "v2", "archive_id" );
 
 	$v1 ||= $repo->config( "host" );
+	$v1 ||= $repo->config("securehost");
 	$v2 ||= $v1;
 
 	return $any ? ($v1, $v2) : $v2;
