@@ -27,45 +27,35 @@ sub _archive_id
 
 sub replay
 {
-	my( $self, $accessid ) = @_;
+	my( $self, $accessid, $request_url ) = @_;
 
 	my $repo = $self->{session};
 	my $fail_message;
 
-	local $SIG{__DIE__};
-	eval { $repo->dataset( "access" )->search(filters => [
-				{ meta_fields => [qw( accessid )], value => "$accessid..", },
-			],
-			limit => 1000, # lets not go crazy ...
-	)->map(sub {
-		(undef, undef, my $access) = @_;
-
-		my $r = $self->log( $access );
-		if( !$r->is_success )
-		{
-			$fail_message = $r->as_string;
-			die "failed\n";
-		}
-		$accessid = $access->id;
-	}) };
-	if( $@ eq "failed\n" )
+	my $access = EPrints::DataObj::Access->new( $repo, $accessid );
+	unless ( defined $access )
 	{
-		$repo->log( "Attempt to re-send PIRUS trackback failed, trying again in 24 hours time" );
-		$repo->log( "PIRUS replay event failed with the response:\n$fail_message" );
-
-		my $event = $self->{event};
-		$event->set_value( "params", [$accessid] );
-		$event->set_value( "start_time", EPrints::Time::iso_datetime( time + 86400 ) );
-		$event->set_value( "description", $fail_message );
-		#return EPrints::Const::HTTP_RESET_CONTENT;
-		return 0;
-	}
-	elsif( $@ )
-	{
-		die $@;
+		$self->_log("PIRUS::replay: Access $accessid not found.");
+		return EPrints::Const::HTTP_INTERNAL_SERVER_ERROR;
 	}
 
-	return;
+	my $r = $self->log( $access, $request_url );
+
+	if( !defined $r || $r->is_success ) { return; }
+
+	$fail_message = $r->as_string;
+
+	$repo->log( "Attempt to re-send PIRUS trackback failed, trying again in 24 hours time" );
+	$repo->log( "PIRUS replay event failed with the response:\n$fail_message" );
+
+	# Reschedule the event:
+	my $event = $self->{event};
+	$event->set_value( "params", [$accessid, $request_url] );
+	$event->set_value( "start_time", EPrints::Time::iso_datetime( time + 86400 ) );
+	$event->set_value( "description", $fail_message );
+
+	# Set status to 'waiting' and commit:
+	return EPrints::Const::HTTP_RESET_CONTENT;
 }
 
 
