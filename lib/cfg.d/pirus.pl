@@ -41,6 +41,7 @@ Initial version
 =cut
 
 require LWP::UserAgent;
+require LWP::Protocol::https;
 require LWP::ConnCache;
 
 # modify the following URL to the PIRUS tracker location
@@ -79,23 +80,23 @@ $c->add_dataset_trigger( 'access', EPrints::Const::EP_TRIGGER_CREATED, sub {
 
 	my $repo = $args{repository};
 	my $access = $args{dataobj};
-
 	my $plugin = $repo->plugin( "Event::PIRUS" );
 
-	my $r = $plugin->log( $access, $repo->current_url( host => 1 ) );
+	my $request_url = $repo->current_url( host => 1 );
+
+	my $r = $plugin->log( $access, $request_url );
 
 	if( defined $r && !$r->is_success )
 	{
 		my $fail_message = "PIRUS dataset trigger failed to send data to tracker.\n " . $r->as_string;
 		my $event = $repo->dataset( "event_queue" )->dataobj_class->create_unique( $repo, {
-			eventqueueid => Digest::MD5::md5_hex( "Event::PIRUS::replay" ),
-			pluginid => "Event::PIRUS",
-			action => "replay",
+			pluginid    => "Event::PIRUS",
+			action      => "replay",
+			params      => [ $access->id, $request_url ],
 			description => $fail_message,
 		});
 		if( defined $event )
 		{
-			$event->set_value( "params", [$access->id] );
 			$event->commit;
 		}
 
