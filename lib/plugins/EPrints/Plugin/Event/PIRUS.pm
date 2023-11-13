@@ -131,11 +131,7 @@ sub log
 	else { return; }
 
 	# rfr_dat
-	if ( $access->is_set("referring_entity_id") )
-	{
-		$qf_params{rfr_dat} = $access->value("referring_entity_id");
-	}
-	else { return; }
+	$qf_params{rfr_dat} = $access->value("referring_entity_id") // q();
 
 	# rfr_id
 	$qf_params{rfr_id} =
