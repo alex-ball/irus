@@ -67,6 +67,8 @@ sub replay
 	return;
 }
 
+
+# Returns undefined if Access cannot be turned into a ping.
 sub log
 {
 	my( $self, $access, $request_url ) = @_;
@@ -77,36 +79,80 @@ sub log
 		$repo->config( "pirus", "tracker" )
 	);
 
-	my $url_tim = $access->value( "datestamp" );
-	$url_tim =~ s/^(\S+) (\S+)$/$1T$2Z/;
+	# We can only send a ping if we have enough information.
+	# The specification for %qf_params can be found at
+	# https://irus.jisc.ac.uk/r5/about/policies/tracker/
 
-	my $artnum = EPrints::OpenArchives::to_oai_identifier(
-		_archive_id( $repo ),
-		$access->value( "referent_id" ),
-	);
+	# url_ver
+	my %qf_params = ( url_ver => "Z39.88-2004", );
 
-	my %qf_params = (
-		url_ver => "Z39.88-2004",
-		url_tim => $url_tim,
-		req_id => "urn:ip:".$access->value( "requester_id" ),
-		req_dat => $access->value( "requester_user_agent" ),
-		'rft.artnum' => $artnum,
-		rfr_id => $repo->config( "host" ) ? $repo->config( "host" ) : $repo->config( "securehost" ),
-		svc_dat => $request_url,
-	);
-	
-	if( $access->is_set( "referring_entity_id" ) )
+	# url_tim
+	if ( $access->is_set("datestamp") )
 	{
-		$qf_params{rfr_dat} = $access->value( "referring_entity_id" );
+		my $url_tim = $access->value("datestamp");
+		$url_tim =~ s/^(\S+) (\S+)$/$1T$2Z/;
+		$qf_params{url_tim} = $url_tim;
 	}
+	else { return; }
 
-	# Counter v5 is interested in summary page views as well as downloads.
-	if( $access->is_set( "service_type_id" ) )
+	# rft_dat
+	if ( $access->is_set("service_type_id") )
 	{
-		$qf_params{rft_dat} = $access->value( "service_type_id" ) eq "?fulltext=yes" ? "Request" : "Investigation";
+		# This is either "?fulltext=yes" = file download (Request)
+		# or "?abstract=yes" = landing page view (Investigation).
+		$qf_params{rft_dat} =
+		  $access->value("service_type_id") eq "?fulltext=yes"
+		  ? "Request"
+		  : "Investigation";
 	}
-	
-	$url->query_form( %qf_params );
+	else { return; }
+
+	# req_id
+	if ( $access->is_set("requester_id") )
+	{
+		$qf_params{req_id} = $access->value("requester_id");
+	}
+	else { return; }
+
+	# req_dat
+	if ( $access->is_set("requester_user_agent") )
+	{
+		$qf_params{req_dat} = $access->value("requester_user_agent");
+	}
+	else { return; }
+
+	# rft.artnum
+	if ( $access->is_set("referent_id") )
+	{
+		my $artnum =
+		  EPrints::OpenArchives::to_oai_identifier( _archive_id($repo),
+			$access->value("referent_id"),
+		  );
+		$qf_params{'rft.artnum'} = $artnum;
+	}
+	else { return; }
+
+	# svc_dat
+	if ($request_url)
+	{
+		$qf_params{svc_dat} = $request_url;
+	}
+	else { return; }
+
+	# rfr_dat
+	if ( $access->is_set("referring_entity_id") )
+	{
+		$qf_params{rfr_dat} = $access->value("referring_entity_id");
+	}
+	else { return; }
+
+	# rfr_id
+	$qf_params{rfr_id} =
+		$repo->config("host")
+	  ? $repo->config("host")
+	  : $repo->config("securehost");
+
+	$url->query_form(%qf_params);
 
 	my $ua = $repo->config( "pirus", "ua" );
 
