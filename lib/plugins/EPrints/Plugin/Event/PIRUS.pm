@@ -50,8 +50,10 @@ sub replay
 
 	# Reschedule the event:
 	my $event = $self->{event};
-	$event->set_value( "params", [$accessid, $request_url] );
-	$event->set_value( "start_time", EPrints::Time::iso_datetime( time + 86400 ) );
+	$start_time = time() + (24 * 60 * 60);   # try again in 24 hours time
+	$event->set_value( "start_time",
+		EPrints::Time::iso_datetime( $start_time )
+	);
 	$event->set_value( "description", $fail_message );
 
 	# Set status to 'waiting' and commit:
